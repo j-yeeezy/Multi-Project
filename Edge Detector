@@ -1,0 +1,203 @@
+import java.awt.image.BufferedImage;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import javax.imageio.ImageIO;
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
+
+public class edgeDetector {
+	/*
+	 * This program is a very basic edge detection program which takes an image, converts it to grayscale,
+	 * and then finds the edges in the photo using partial derivatives. An edge in a photo is represented 
+	 * as a large change in the luminance, or brightness between pixels. To measure this change, we approximate
+	 * the partial derivatives in terms of x and y for each pixel. To calculate the partial derivative of the pixel
+	 * we use finite differences, and the equation (f(x+h,y)-f(x,y))/h for x values and (f(x,y+h)-f(x,y))/h for y,
+	 * where h is the finite difference that we can set. If the derivative is larger than a limit we specify,
+	 * then the program marks the pixel as part of an edge, represented by a black pixel in the output2 file. 
+	 * If we change h, the finite difference, we can change how sharp the edge needs to be (i.e. how little of a gradient).
+	 * If we change the limit for the derivative value, we can change how subtle the edges are that are included.
+	 * 
+	 * This code has documentation comments throughout which will explain how the program works and is related to calculus.
+	 * The most important methos is the toGrayscale method, where the edge detection is happening, and where 
+	 */
+	public static void main(String args[]) throws IOException {
+		//This main method runs the program and calls on all the methods below
+		BufferedImage img = null;
+		File f = null;
+		int[] details = getInfo();
+		f = getImage();
+		// read image
+		img = readTheImage(f);
+		// get image width and height
+		int width = img.getWidth();
+		int height = img.getHeight();
+		//creates an array which allows us to store the luminance values 
+		int[][] imageArray = new int[height][width];
+		imageArray = edgeDetection(width, height, img, details[0], details[1]);
+		// convert to grayscale
+		toCSV(imageArray, width, height);
+
+		System.out.println("Done");
+	}
+
+	private static int[] getInfo() {
+		int[] details = new int[2];
+		details[0] = Integer.parseInt(JOptionPane.showInputDialog(null, "Input the finite difference you want from 1 to 10. A lower value only detects"
+				+ " sharper edges while a larger value will detect edges that may have gradients"));
+		details[1] = Integer.parseInt(JOptionPane.showInputDialog(null, "Input the change threshold you want, preferably between 5 and 20. The smaller "
+				+ "the number, the more subtle edges will be included"));
+		return details;
+	}
+
+	private static File getImage() {
+		//This method allows the user to select an image from the computer 
+		File f = null;
+		JOptionPane.showMessageDialog(null, "Please select an image. The image has to be in the jpg format.");
+		JFileChooser jfc = new JFileChooser();
+		jfc.setVisible(true);
+		int openDialog = jfc.showOpenDialog(null);
+		if (openDialog == JFileChooser.APPROVE_OPTION) {
+			f = jfc.getSelectedFile();
+		}
+		return f;
+	}
+	
+	private static BufferedImage readTheImage(File f) {
+		//This method reads the image selected and processes it
+		BufferedImage img = null;
+		try {
+			img = ImageIO.read(f);
+		} catch (IOException e) {
+			System.out.println(e);
+		}
+		return img;
+	}
+
+	private static int[][] edgeDetection(int width, int height, BufferedImage img, int h, int limit) {
+		/*
+		 * This method is the one that converts the image to grayscale, then calculates the partial derivative
+		 * in both the x and the y directions, and creates an image of the largest partial derivative values, aka the edges 
+		 */
+		int[][] imageArray = new int[height][width];
+		//the loop below goes through each row in the photo
+		for (int y = 0; y < height; y++) {
+			//the loop below goes through each pixel in the row
+			for (int x = 0; x < width; x++) {
+				//this gets the RGB value at that given pixel
+				int p = img.getRGB(x, y);
+
+				int a = (p >> 24) & 0xff;
+				int r = (p >> 16) & 0xff;
+				int g = (p >> 8) & 0xff;
+				int b = p & 0xff;
+
+				//calculates the average of the RGB values to find the luminance
+				int avg = (r + g + b) / 3;
+
+				//converts the luminance into the form that photos and code use
+				p = (a << 24) | (avg << 16) | (avg << 8) | avg;
+				//this turns the pixel into the grayscale luminance value
+				img.setRGB(x, y, p);
+				//stores the pixels luminance in an array for later use
+				imageArray[y][x] = avg;
+			}
+		}
+
+		//writes the image to a new file
+		try {
+			File f = new File("C:\\Temp\\Output.jpg");
+			ImageIO.write(img, "jpg", f);
+		} catch (IOException e) {
+			System.out.println(e);
+		
+		}
+		
+		/*the next part of this method calculates the partial derivative in terms of x and y and makes pixels 
+		 * which are edges black. We have to do this both in terms of x and y because horizontal lines are not
+		 * "seen" by partial derivatives in terms of x and vertical lines aren't seen by partials in terms of y
+		*/
+		BufferedImage edges = img;
+		
+		int partialX = 0;
+		int partialY = 0;
+		int a = (img.getRGB(10, 10) >> 24) & 0xff;
+		int black = (a << 24) | (0 << 16) | (0 << 8) | 0;
+		int white = (a << 24) | (255 << 16) | (255 << 8) | 255;
+		//these next 2 loops go through the pixels and calculate the partial derivatives in terms of x and adds black pixels for the edges
+		//this loop goes through all the rows of the image
+		for (int y = 0; y< height; y++) {
+			/*This loop goes through each pixel in the row. It starts off at h because the finite difference involves doing x-h, which
+			 *can not be less than 0. At each pixel, it calculates the partial derivative in terms of x. If the value is greater than 
+			 *the threshold value, the program puts a black pixel there, labeling it as an edge
+			*/
+			for (int x = h; x < width; x++) {
+				//calculates partial derivative for x
+				partialX = (imageArray[y][x] - imageArray[y][x-h])/h;
+				/*
+				 * The next two statements determine if deriative is less than or greater than the limit and sets pixel
+				 * to white for no edge or black for having an edge
+				 */
+				
+				if (Math.abs(partialX) < limit)
+					edges.setRGB(x,y,white);
+				else
+					edges.setRGB(x,y,black);
+				
+			}
+		}
+		/*
+		 * These next 2 loops go through the pixels and calculate the partial derivatives in terms of y and adds black pixels
+		 * for the edge pixels. This is essentially just for catching horizontal lines as most edges will already been seen
+		 * by the partial derivative in terms of x
+		*/
+		//this loop goes through all the columns
+		for (int x = 0; x< width; x++) {
+			//This loop goes through each pixel in the column
+			for (int y = h; y < height; y++) {
+				//calculates partial derivative for y
+				partialY = (imageArray[y][x] - imageArray[y-h][x])/h;
+				if (Math.abs(partialY) >= limit)
+					edges.setRGB(x,y,black);
+				
+			}
+		}
+		try {
+			File edgeFile = new File("C:\\Temp\\Output2.jpg");
+			ImageIO.write(edges, "jpg", edgeFile);
+		} catch (IOException e) {
+			System.out.println(e);
+		}
+
+		return imageArray;
+	}
+
+	private static void toCSV(int[][] imageArray, int width, int height) throws IOException {
+		/*
+		 * this method takes the 2D array of luminance values and exports it as a excel file. If you were to open
+		 * this file in excel, each cell would correspond with a pixel and the value in the cell would be the luminance
+		*/
+		StringBuilder builder = new StringBuilder();
+		for (int i = 0; i < height; i++)// for each row
+		{
+			for (int j = 0; j < width; j++)// for each column
+			{
+				builder.append(imageArray[i][j] + " ");
+				if (j < width - 1)
+					builder.append(",");
+			}
+			builder.append("\n");
+		}
+		BufferedWriter writer = new BufferedWriter(new FileWriter("C:\\Temp\\Values.csv"));
+		writer.write(builder.toString());
+		writer.close();
+	}
+
+	
+
+	private static void readImage() {
+		// TODO Auto-generated method stub
+
+	}
+}
